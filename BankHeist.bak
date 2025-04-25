@@ -1,0 +1,75 @@
+#lang racket
+
+(struct location (name description items exits locked-items) #:transparent)
+
+(struct item (name description portable?) #:transparent)
+
+(struct player (location inventory) #:transparent)
+
+(struct game-state (player world discovered-items) #:transparent)
+
+(define planning-room
+  (location 'planning-room
+            "You're in the dimly lit heist planning room. A map of the bank is laid out on the table."
+            '(bank-map)
+            '((drive . bank-lobby))
+            '()))
+
+(define bank-lobby
+  (location 'bank-lobby
+            "You're standing in the bank lobby. It's eerily quiet. A security camera watches from above."
+            '()
+            '((north . hallway) (south . planning-room))
+            '(security-keycard)))
+
+(define hallway
+  (location 'hallway
+            "A long hallway with locked doors on either side. A keypad is mounted beside the vault door."
+            '()
+            '((south . bank-lobby) (east . vault))
+            '()))
+
+(define vault
+  (location 'vault
+            "You're inside the vault. Stacks of cash and gold glimmer under the dim lighting."
+            '(cash-gold)
+            '((west . hallway))
+            '(laser-trigger)))
+
+(define bank-map
+  (item 'bank-map
+        "A detailed layout of the bank, showing vaults, security, and escape routes."
+        #t))
+
+(define security-keycard
+  (item 'security-keycard
+        "A magnetic card labeled 'Security Clearance – Level 1'. Might unlock doors."
+        #t))
+
+(define drill
+  (item 'drill
+        "A heavy-duty drill capable of breaking through steel barriers."
+        #t))
+
+(define cash-gold
+  (item 'cash-gold
+        "Stacks of cash and gold bars. This is what you came for."
+        #t))
+
+(define laser-trigger
+  (item 'laser-trigger
+        "A hidden sensor system. Trip it and the alarm sounds. Better disable it first."
+        #f)) ; can't pick it up
+
+(define world
+  (list
+   (cons 'planning-room planning-room)
+   (cons 'bank-lobby bank-lobby)
+   (cons 'hallway hallway)
+   (cons 'vault vault)))
+
+(define initial-player
+  (player 'planning-room '())) ; starts with an empty inventory
+
+(define initial-game-state
+  (game-state initial-player world '())) ; no hidden items discovered yet
