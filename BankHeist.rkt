@@ -9,10 +9,11 @@
 ;; - current-room: The ID of the room the player is currently in
 ;; - inventory: A list of items the player is carrying
 ;; - rooms: An immutable hash table mapping room IDs to room structures
+;; - unlocked-exits: A list of unlocked exit paths (represented as [from-room to-room])
 ;; - game-over: A boolean indicating whether the game is over (success or failure)
 ;; - message: A message to display to the player
 
-(struct game-state (current-room inventory rooms game-over message) #:transparent)
+(struct game-state (current-room inventory rooms unlocked-exits game-over message) #:transparent)
 
 ;; Room structure
 (struct room (name description items exits) #:transparent)
@@ -28,7 +29,7 @@
         `((outside . ,(room "Outside the Bank" 
               "You're standing outside the Grand National Bank. It's after hours and the building is mostly dark.\nA security guard patrols around the corner every few minutes." 
               (list "lockpick" "ski mask")
-              (list (exit 'east 'entrance #f "The front entrance to the bank is to the east." #f))))
+              (list (exit 'east 'entrance (list "ski mask" "lockpick") "The front entrance to the bank is to the east." "The bank is locked and you don't want to be seen get a ski mask and a lockpick!"))))
         
         (entrance . ,(room "Bank Entrance" 
               "You're in the main entrance of the bank. Security cameras sweep the area.\nThe vault is visible at the far end of the lobby." 
@@ -61,8 +62,8 @@
               (list "money bag" "gold bar" "diamonds")
               (list (exit 'north 'vault-door #f "The way out is back north through the vault door." #f))))))])
     
-    ;; Return initial game state
-    (game-state 'outside '() rooms #f "Welcome to the Bank Heist Adventure!\nYour mission: Break into the vault and escape with the loot.")))
+    ;; Return initial game state with empty unlocked-exits list
+    (game-state 'outside '() rooms '() #f "Welcome to the Bank Heist Adventure!\nYour mission: Break into the vault and escape with the loot.")))
 
 ;; ---- GAME ACTIONS ----
 
@@ -132,6 +133,10 @@
         (struct-copy game-state game 
                     [message (string-append "Inventory: " (string-join inv ", "))]))))
 
+;; Helper function to check if an exit is unlocked
+(define (exit-unlocked? game from-room to-room)
+  (member (list from-room to-room) (game-state-unlocked-exits game)))
+
 ;; Try to move in a direction
 (define (move game direction)
   (let* ([current-room-id (game-state-current-room game)]
@@ -143,11 +148,9 @@
       [(not possible-exit)
        (struct-copy game-state game 
                    [message (format "You can't go ~a from here." direction)])]
-      [(and (exit-key-item possible-exit)
-            (not (has-required-items? game (exit-key-item possible-exit))))
-       (struct-copy game-state game 
-                   [message (exit-locked-msg possible-exit)])]
-      [else
+      
+      ;; Check if the exit is already unlocked
+      [(exit-unlocked? game current-room-id (exit-target possible-exit))
        (let ([new-room (exit-target possible-exit)])
          (if (eq? new-room 'vault)
              ;; Winning condition - reached the vault
@@ -163,8 +166,49 @@
                          [message (string-append 
                                    "You move " (symbol->string direction) ".\n\n"
                                    "--- " (room-name (hash-ref rooms new-room)) " ---\n\n"
-                                   (room-description (hash-ref rooms new-room)))]
-                         )))])))
+                                   (room-description (hash-ref rooms new-room)))])))]
+      
+      ;; Check if the exit requires a key and player doesn't have it
+      [(and (exit-key-item possible-exit)
+            (not (has-required-items? game (exit-key-item possible-exit))))
+       (struct-copy game-state game 
+                   [message (exit-locked-msg possible-exit)])]
+      
+      ;; Player has the key, unlock the door and proceed
+      [else
+       (let* ([new-room (exit-target possible-exit)]
+              ;; Add this exit to unlocked-exits list if it has a key requirement
+              [new-unlocked-exits (if (exit-key-item possible-exit)
+                                     (cons (list current-room-id new-room) 
+                                           (game-state-unlocked-exits game))
+                                     (game-state-unlocked-exits game))]
+              [unlock-msg (if (exit-key-item possible-exit)
+                             (string-append 
+                              "You unlock the door with " 
+                              (if (string? (exit-key-item possible-exit))
+                                  (string-append "the " (exit-key-item possible-exit))
+                                  (string-append "your items"))
+                              ". ")
+                             "")])
+         (if (eq? new-room 'vault)
+             ;; Winning condition - reached the vault
+             (struct-copy game-state game 
+                         [current-room new-room]
+                         [unlocked-exits new-unlocked-exits]
+                         [message (string-append 
+                                   unlock-msg
+                                   (room-description (hash-ref rooms new-room))
+                                   "\n\nCONGRATULATIONS! You've successfully broken into the vault!")]
+                         [game-over #t])
+             ;; Normal room transition
+             (struct-copy game-state game 
+                         [current-room new-room]
+                         [unlocked-exits new-unlocked-exits]
+                         [message (string-append 
+                                   unlock-msg
+                                   "You move " (symbol->string direction) ".\n\n"
+                                   "--- " (room-name (hash-ref rooms new-room)) " ---\n\n"
+                                   (room-description (hash-ref rooms new-room)))])))])))
 
 ;; Check if the player has all required items
 (define (has-required-items? game required-items)
