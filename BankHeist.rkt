@@ -63,7 +63,8 @@
               (list (exit 'north 'vault-door #f "The way out is back north through the vault door." #f))))))])
     
     ;; Return initial game state with empty unlocked-exits list
-    (game-state 'outside '() rooms '() #f "Welcome to the Bank Heist Adventure!\nYour mission: Break into the vault and escape with the loot.")))
+    (game-state 'outside '() rooms '() #f "Welcome to the Bank Heist Adventure!\nYour mission: Break into the vault and escape with the loot.\n
+Available commands:\n- look: Look around\n- inventory: Check your inventory\n- take [item]: Pick up an item\n- drop [item]: Drop an item\n- go [direction]: Move in a direction\n- north, south, east, west: Move in that direction\n- quit: Exit the game")))
 
 ;; ---- GAME ACTIONS ----
 
